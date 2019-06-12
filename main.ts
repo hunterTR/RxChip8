@@ -9,7 +9,7 @@ class Main {
   cpu: CPU;
   ram: RAM;
   ramSubject$: BehaviorSubject<RAM> = new BehaviorSubject(new RAM());
-  private loadGameSubject$: BehaviorSubject<ArrayBuffer> = new BehaviorSubject<ArrayBuffer>();
+  private loadGameSubject$: BehaviorSubject<ArrayBuffer> = new BehaviorSubject<ArrayBuffer>(null);
   private loadGame$: Observable<ArrayBuffer>;
   ram$: Observable<RAM>;
   cpu$: Observable<CPU>;
@@ -32,8 +32,8 @@ class Main {
     // initialize RAM
     this.ram$ = this.ramSubject$.asObservable();
     // initialize CPU
-
-    this.cpu$ = combineLatest(this.ram$, this.loadGame$)
+  //  this.cpu$ = 
+    combineLatest(this.ram$, this.loadGame$)
       .pipe(
         tap(([ram, arrayBuffer]) => {
           // initialize fontset
@@ -43,7 +43,7 @@ class Main {
           // initialize game
           this.loadGameToRam(ram, arrayBuffer);
         }),
-        map(ram => new CPU(ram)),
+        map(([ram, arrayBuffer]) => new CPU(ram)),
         shareReplay(1)
       )
       .subscribe(cpu => {
@@ -70,7 +70,7 @@ class Main {
   loadGame(file: any): boolean {
     let reader = new FileReader();
     reader.onload = e => {
-      this.loadGameSubject$.next(reader.result);
+      this.loadGameSubject$.next(reader.result as ArrayBuffer);
     };
     reader.readAsArrayBuffer(file);
     return true;
