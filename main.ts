@@ -1,94 +1,114 @@
-import { RAM } from './ram';
-import { CPU } from './cpu';
+import { RAM } from './src/ram';
+import { CPU } from './src/cpu';
+import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
+import { map, shareReplay, tap } from 'rxjs/operators';
+import { Renderer } from './src/renderer';
 
-const SCREEN_WIDTH = 640;
-const SCREEN_HEIGHT = 320;
-const pixelScale = 10;
+
 class Main {
   cpu: CPU;
   ram: RAM;
+  ramSubject$: BehaviorSubject<RAM> = new BehaviorSubject(new RAM());
+  private loadGameSubject$: BehaviorSubject<ArrayBuffer> = new BehaviorSubject<ArrayBuffer>(null);
+  private loadGame$: Observable<ArrayBuffer>;
+  ram$: Observable<RAM>;
+  cpu$: Observable<CPU>;
   screen: HTMLCanvasElement;
-  canvasContext: any;
+  canvasContext: CanvasRenderingContext2D;
   loadFlag: boolean;
+  renderer: Renderer;
 
   constructor() {
+    // start initialize
     this.intialize();
   }
 
   intialize() {
     this.loadFlag = false;
-    // initialize ram
-    this.ram = new RAM();
-
+    this.loadGame$ = this.loadGameSubject$.asObservable();
     // initialize screen
-    this.screen = <HTMLCanvasElement>document.getElementById('screen');
-    this.canvasContext = this.screen.getContext('2d');
-    this.canvasContext.fillStyle = 'black';
-    this.canvasContext.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    // initialize fontset
-    for (let i = 0; i < fontset.length; i++) {
-      this.ram.write(i, fontset[i]);
-    }
+    this.renderer = new Renderer();
 
-    // initialize rom
-
-    //this.loadFlag = this.loadGame();
+    // initialize RAM
+    this.ram$ = this.ramSubject$.asObservable();
+    // initialize CPU
+  //  this.cpu$ = 
+    combineLatest(this.ram$, this.loadGame$)
+      .pipe(
+        tap(([ram, arrayBuffer]) => {
+          // initialize fontset
+          for (let i = 0; i < fontset.length; i++) {
+            ram.write(i, fontset[i]);
+          }
+          // initialize game
+          this.loadGameToRam(ram, arrayBuffer);
+        }),
+        map(([ram, arrayBuffer]) => new CPU(ram)),
+        shareReplay(1)
+      )
+      .subscribe(cpu => {
+        this.run(cpu);
+      });
 
     //initialize cpu
-    this.cpu = new CPU(this.ram);
+    //this.cpu = new CPU(this.ram);
   }
 
-  run() {
+  run(cpu: CPU) {
     //this.sleep(500);
-    this.cpu.runCycle();
-    if (this.cpu.drawFlag) {
-      this.drawScreen();
-      this.cpu.drawFlag = false;
+    cpu.runCycle();
+    if (cpu.drawFlag) {
+      this.renderer.drawScreen(cpu.graphicArray);
+      cpu.drawFlag = false;
     }
 
     setTimeout(() => {
-      this.run();
+      this.run(cpu);
     }, 1);
   }
 
   loadGame(file: any): boolean {
     let reader = new FileReader();
     reader.onload = e => {
-      let buffer = new Uint8Array(reader.result as ArrayBuffer);
-      for (let i = 0; i < buffer.length; i++) {
-        this.ram.write(0x200 + i, buffer[i]);
-      }
-      console.log('loaded');
-      this.loadFlag = true;
-      this.run();
+      this.loadGameSubject$.next(reader.result as ArrayBuffer);
     };
     reader.readAsArrayBuffer(file);
     return true;
   }
 
-  drawScreen() {
-    // reset canvas
-    this.canvasContext.fillStyle = 'black';
-    this.canvasContext.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    // draw
-    for (let h = 0; h < 32; h++) {
-      for (let w = 0; w < 64; w++) {
-        if (this.cpu.graphicArray[h][w] === 1) {
-          this.drawPixel(w, h);
-        }
-      }
+  loadGameToRam(ram: RAM, arrayBuffer: ArrayBuffer) {
+    let buffer = new Uint8Array(arrayBuffer);
+    for (let i = 0; i < buffer.length; i++) {
+      ram.write(0x200 + i, buffer[i]);
     }
+    console.log('loaded');
+    this.loadFlag = true;
+    //this.run();
   }
 
-  sleep(delay: number) {
-    var start = new Date().getTime();
-    while (new Date().getTime() < start + delay);
-  }
+  // drawScreen() {
+  //   // reset canvas
+  //   this.canvasContext.fillStyle = 'black';
+  //   this.canvasContext.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+  //   // draw
+  //   for (let h = 0; h < 32; h++) {
+  //     for (let w = 0; w < 64; w++) {
+  //       if (this.cpu.graphicArray[h][w] === 1) {
+  //         this.drawPixel(w, h);
+  //       }
+  //     }
+  //   }
+  // }
 
-  drawPixel(x: number, y: number) {
-    this.canvasContext.fillStyle = 'white';
-    this.canvasContext.fillRect(x * pixelScale, y * pixelScale, 10, 10);
-  }
+  // sleep(delay: number) {
+  //   var start = new Date().getTime();
+  //   while (new Date().getTime() < start + delay);
+  // }
+
+  // drawPixel(x: number, y: number) {
+  //   this.canvasContext.fillStyle = 'white';
+  //   this.canvasContext.fillRect(x * pixelScale, y * pixelScale, 10, 10);
+  // }
 }
 
 const fontset: number[] = [
