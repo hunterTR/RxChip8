@@ -1,7 +1,7 @@
 import { RAM } from './src/ram';
 import { CPU } from './src/cpu';
 import { Observable, BehaviorSubject, combineLatest, interval, fromEvent, merge } from 'rxjs';
-import { map, shareReplay, tap } from 'rxjs/operators';
+import { map, shareReplay, tap, mergeMap, switchMap } from 'rxjs/operators';
 import { Renderer } from './src/renderer';
 import { KeyPad } from './src/keypad';
 
@@ -51,37 +51,35 @@ class Main {
 
       shareReplay(1)
     );
+
+    // start initializing.
     this.cpu$.subscribe(res => {
       if (res != null) {
-        this.run();
+        this.run(); // can be switched to operators.
       }
     });
-
   }
 
   run() {
+
+    // running the cpu.
     combineLatest(this.cpu$, this.speed$)
       .pipe(
         tap(([cpu, speed]) => {
           // console.log(cpu, speed);
           cpu.runCycle();
           if (cpu.drawFlag) {
-            this.renderer.drawScreen(cpu.graphicArray);
             cpu.drawFlag = false;
           }
         })
       )
       .subscribe();
 
-    // cpu.runCycle();
-    // if (cpu.drawFlag) {
-    //   this.renderer.drawScreen(cpu.graphicArray);
-    //   cpu.drawFlag = false;
-    // }
-
-    // setTimeout(() => {
-    //   this.run(cpu);
-    // }, 1);
+      //subscribing to draw..
+      this.cpu$.pipe(
+        switchMap((cpu) => {
+          return cpu.draw$.pipe(tap(graphicArray => this.renderer.drawScreen(graphicArray)));
+        })).subscribe();
   }
 
   loadGame(file: any): boolean {
@@ -102,30 +100,6 @@ class Main {
     this.loadFlag = true;
     //this.run();
   }
-
-  // drawScreen() {
-  //   // reset canvas
-  //   this.canvasContext.fillStyle = 'black';
-  //   this.canvasContext.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-  //   // draw
-  //   for (let h = 0; h < 32; h++) {
-  //     for (let w = 0; w < 64; w++) {
-  //       if (this.cpu.graphicArray[h][w] === 1) {
-  //         this.drawPixel(w, h);
-  //       }
-  //     }
-  //   }
-  // }
-
-  // sleep(delay: number) {
-  //   var start = new Date().getTime();
-  //   while (new Date().getTime() < start + delay);
-  // }
-
-  // drawPixel(x: number, y: number) {
-  //   this.canvasContext.fillStyle = 'white';
-  //   this.canvasContext.fillRect(x * pixelScale, y * pixelScale, 10, 10);
-  // }
 }
 
 const fontset: number[] = [

@@ -12,6 +12,7 @@ export class Renderer {
   }
 
   drawScreen(graphicArray: any[][]) {
+  console.log(graphicArray);
     // reset canvas
     this.canvasContext.fillStyle = 'black';
     this.canvasContext.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
