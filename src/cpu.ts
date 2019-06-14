@@ -1,19 +1,20 @@
 import { Opcode } from "./models/opcode";
 import { OpcodeBranch, RegisterOperation } from "./enums/opcode-branch";
 import { RAM } from "./ram";
+import { KeyPad } from "./keypad";
 
 export class CPU {
-  ram: RAM;
   PC: number;
   I: number;
   stack: Uint16Array;
   stackPointer: number;
   delayTimer: number;
   soundTimer: number;
-  keyPad: Uint8Array;
   key: number;
+  keyPad: Uint8Array;
   graphicArray: number[][];
   drawFlag: boolean;
+  cycleSpeed: number = 1;
 
   //registers
   V0: number;
@@ -32,9 +33,9 @@ export class CPU {
   VD: number;
   VE: number;
   VF: number;
-  constructor(ram: RAM) {
+  constructor(public ram: RAM, keyPad: KeyPad) {
+    this.keyPad = keyPad.keyPad;
     this.initialize(); //initialize cpu
-    this.ram = ram; //connect the ram
   }
 
   decode(): Opcode {
@@ -58,7 +59,7 @@ export class CPU {
   runCycle() {
     //console.log('running cycle');
     const instruction = this.decode();
-    console.log(instruction.opcode.toString(16));
+   // console.log(instruction.opcode.toString(16));
     const registerX = (instruction.opcode & 0x0f00) >> 8;
     const registerY = (instruction.opcode & 0x00f0) >> 4;
 
@@ -381,7 +382,6 @@ export class CPU {
     this.soundTimer = 0 & 0xff;
     this.stack = new Uint16Array(16);
     this.stackPointer = 0;
-    this.keyPad = new Uint8Array(16);
     this.resetScreenArray();
 
     this.V0 = 0 & 0xff;

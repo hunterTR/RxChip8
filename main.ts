@@ -1,14 +1,15 @@
 import { RAM } from './src/ram';
 import { CPU } from './src/cpu';
-import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
+import { Observable, BehaviorSubject, combineLatest, interval, fromEvent, merge } from 'rxjs';
 import { map, shareReplay, tap } from 'rxjs/operators';
 import { Renderer } from './src/renderer';
-
+import { KeyPad } from './src/keypad';
 
 class Main {
   cpu: CPU;
   ram: RAM;
   ramSubject$: BehaviorSubject<RAM> = new BehaviorSubject(new RAM());
+  keyPadSubject$: BehaviorSubject<KeyPad> = new BehaviorSubject(new KeyPad());
   private loadGameSubject$: BehaviorSubject<ArrayBuffer> = new BehaviorSubject<ArrayBuffer>(null);
   private loadGame$: Observable<ArrayBuffer>;
   ram$: Observable<RAM>;
@@ -17,6 +18,8 @@ class Main {
   canvasContext: CanvasRenderingContext2D;
   loadFlag: boolean;
   renderer: Renderer;
+  keyPad$: Observable<KeyPad>;
+  speed$ = interval(1);
 
   constructor() {
     // start initialize
@@ -28,43 +31,57 @@ class Main {
     this.loadGame$ = this.loadGameSubject$.asObservable();
     // initialize screen
     this.renderer = new Renderer();
-
+    // initialize keypad
+    this.keyPad$ = this.keyPadSubject$.asObservable();
     // initialize RAM
     this.ram$ = this.ramSubject$.asObservable();
     // initialize CPU
-  //  this.cpu$ = 
-    combineLatest(this.ram$, this.loadGame$)
-      .pipe(
-        tap(([ram, arrayBuffer]) => {
-          // initialize fontset
-          for (let i = 0; i < fontset.length; i++) {
-            ram.write(i, fontset[i]);
-          }
-          // initialize game
-          this.loadGameToRam(ram, arrayBuffer);
-        }),
-        map(([ram, arrayBuffer]) => new CPU(ram)),
-        shareReplay(1)
-      )
-      .subscribe(cpu => {
-        this.run(cpu);
-      });
+    this.cpu$ = combineLatest(this.ram$, this.keyPad$, this.loadGame$).pipe(
+      tap(([ram, keyPad, arrayBuffer]) => {
+        // initialize fontset
+        for (let i = 0; i < fontset.length; i++) {
+          ram.write(i, fontset[i]);
+        }
+        // initialize game
+        this.loadGameToRam(ram, arrayBuffer);
+      }),
+      map(([ram, keyPad, arrayBuffer]) => {
+        return arrayBuffer ? new CPU(ram, keyPad) : null;
+      }),
 
-    //initialize cpu
-    //this.cpu = new CPU(this.ram);
+      shareReplay(1)
+    );
+    this.cpu$.subscribe(res => {
+      if (res != null) {
+        this.run();
+      }
+    });
+
   }
 
-  run(cpu: CPU) {
-    //this.sleep(500);
-    cpu.runCycle();
-    if (cpu.drawFlag) {
-      this.renderer.drawScreen(cpu.graphicArray);
-      cpu.drawFlag = false;
-    }
+  run() {
+    combineLatest(this.cpu$, this.speed$)
+      .pipe(
+        tap(([cpu, speed]) => {
+          // console.log(cpu, speed);
+          cpu.runCycle();
+          if (cpu.drawFlag) {
+            this.renderer.drawScreen(cpu.graphicArray);
+            cpu.drawFlag = false;
+          }
+        })
+      )
+      .subscribe();
 
-    setTimeout(() => {
-      this.run(cpu);
-    }, 1);
+    // cpu.runCycle();
+    // if (cpu.drawFlag) {
+    //   this.renderer.drawScreen(cpu.graphicArray);
+    //   cpu.drawFlag = false;
+    // }
+
+    // setTimeout(() => {
+    //   this.run(cpu);
+    // }, 1);
   }
 
   loadGame(file: any): boolean {
@@ -203,110 +220,4 @@ fileInput.addEventListener('change', function(e) {
   // Put the rest of the demo code here.
   var file = (<any>e.target).files[0];
   chip8.loadGame(file);
-});
-
-document.addEventListener('keydown', event => {
-  const keyName = event.key;
-  if (keyName === '1') {
-    chip8.cpu.keyPad[0] = 1;
-  }
-  if (keyName === '2') {
-    chip8.cpu.keyPad[1] = 1;
-  }
-  if (keyName === '3') {
-    chip8.cpu.keyPad[2] = 1;
-  }
-  if (keyName === '4') {
-    chip8.cpu.keyPad[3] = 1;
-  }
-  if (keyName === 'q') {
-    chip8.cpu.keyPad[4] = 1;
-  }
-  if (keyName === 'w') {
-    chip8.cpu.keyPad[5] = 1;
-  }
-  if (keyName === 'e') {
-    chip8.cpu.keyPad[6] = 1;
-  }
-  if (keyName === 'r') {
-    chip8.cpu.keyPad[7] = 1;
-  }
-  if (keyName === 'a') {
-    chip8.cpu.keyPad[8] = 1;
-  }
-  if (keyName === 's') {
-    chip8.cpu.keyPad[9] = 1;
-  }
-  if (keyName === 'd') {
-    chip8.cpu.keyPad[10] = 1;
-  }
-  if (keyName === 'f') {
-    chip8.cpu.keyPad[11] = 1;
-  }
-  if (keyName === 'z') {
-    chip8.cpu.keyPad[12] = 1;
-  }
-  if (keyName === 'x') {
-    chip8.cpu.keyPad[13] = 1;
-  }
-  if (keyName === 'c') {
-    chip8.cpu.keyPad[14] = 1;
-  }
-  if (keyName === 'v') {
-    chip8.cpu.keyPad[15] = 1;
-  }
-  console.log(keyName);
-});
-
-document.addEventListener('keyup', event => {
-  const keyName = event.key;
-  if (keyName === '1') {
-    chip8.cpu.keyPad[0] = 0;
-  }
-  if (keyName === '2') {
-    chip8.cpu.keyPad[1] = 0;
-  }
-  if (keyName === '3') {
-    chip8.cpu.keyPad[2] = 0;
-  }
-  if (keyName === '4') {
-    chip8.cpu.keyPad[3] = 0;
-  }
-  if (keyName === 'q') {
-    chip8.cpu.keyPad[4] = 0;
-  }
-  if (keyName === 'w') {
-    chip8.cpu.keyPad[5] = 0;
-  }
-  if (keyName === 'e') {
-    chip8.cpu.keyPad[6] = 0;
-  }
-  if (keyName === 'r') {
-    chip8.cpu.keyPad[7] = 0;
-  }
-  if (keyName === 'a') {
-    chip8.cpu.keyPad[8] = 0;
-  }
-  if (keyName === 's') {
-    chip8.cpu.keyPad[9] = 0;
-  }
-  if (keyName === 'd') {
-    chip8.cpu.keyPad[10] = 0;
-  }
-  if (keyName === 'f') {
-    chip8.cpu.keyPad[11] = 0;
-  }
-  if (keyName === 'z') {
-    chip8.cpu.keyPad[12] = 0;
-  }
-  if (keyName === 'x') {
-    chip8.cpu.keyPad[13] = 0;
-  }
-  if (keyName === 'c') {
-    chip8.cpu.keyPad[14] = 0;
-  }
-  if (keyName === 'v') {
-    chip8.cpu.keyPad[15] = 0;
-  }
-  console.log(keyName);
 });
