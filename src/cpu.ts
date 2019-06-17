@@ -2,9 +2,11 @@ import { Opcode } from './models/opcode';
 import { OpcodeBranch, RegisterOperation } from './enums/opcode-branch';
 import { RAM } from './ram';
 import { KeyPad } from './keypad';
-import { Observable, BehaviorSubject } from 'rxjs';
+import { Observable, BehaviorSubject, interval } from 'rxjs';
+import { tap, takeWhile } from 'rxjs/operators';
 
 export class CPU {
+  private drawSubject$: BehaviorSubject<number[][]> = new BehaviorSubject<number[][]>(new Array<Array<number>>());
   PC: number;
   I: number;
   stack: Uint16Array;
@@ -16,9 +18,9 @@ export class CPU {
   graphicArray: number[][];
   drawFlag: boolean;
   cycleSpeed: number = 1;
-  private drawSubject$: BehaviorSubject<number[][]> = new BehaviorSubject<number[][]>(new Array<Array<number>>());
   draw$: Observable<number[][]>;
-
+  speed$ = interval(1);
+  isRunning: boolean;
   //registers
   V0: number;
   V1: number;
@@ -193,8 +195,7 @@ export class CPU {
             }
           }
         }
-        this.drawFlag = true;
-        console.log('should draw');
+        // this.drawFlag = true;
         this.drawSubject$.next(this.graphicArray);
         break;
       }
@@ -371,6 +372,7 @@ export class CPU {
   }
 
   initialize() {
+    this.isRunning = true;
     this.PC = 0x200 & 0xffff;
     this.I = 0 & 0xffff;
     this.delayTimer = 0 & 0xff;
@@ -380,7 +382,23 @@ export class CPU {
     this.resetScreenArray();
     this.drawSubject$ = new BehaviorSubject<number[][]>(this.graphicArray);
     this.draw$ = this.drawSubject$.asObservable();
+    this.resetRegisters();
+    // start running the cpu.
+    this.speed$
+      .pipe(
+        tap((speed) => {
+          this.runCycle();
+        }),
+        takeWhile(() => this.isRunning)
+      )
+      .subscribe();
+  }
 
+  destroy(){
+    this.isRunning=false;
+  }
+
+  resetRegisters() {
     this.V0 = 0 & 0xff;
     this.V1 = 0 & 0xff;
     this.V2 = 0 & 0xff;
@@ -398,7 +416,6 @@ export class CPU {
     this.VE = 0 & 0xff;
     this.VF = 0 & 0xff;
   }
-
   getRegister(num: number): number {
     // instead of this extra code we could have one register and emulate registers like a memory.
     switch (num) {

@@ -1,7 +1,7 @@
 import { RAM } from './src/ram';
 import { CPU } from './src/cpu';
-import { Observable, BehaviorSubject, combineLatest, interval, fromEvent, merge } from 'rxjs';
-import { map, shareReplay, tap, mergeMap, switchMap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, combineLatest, interval, fromEvent, merge, of } from 'rxjs';
+import { map, shareReplay, tap, mergeMap, switchMap, takeWhile, finalize, scan } from 'rxjs/operators';
 import { Renderer } from './src/renderer';
 import { KeyPad } from './src/keypad';
 
@@ -20,7 +20,7 @@ class Main {
   renderer: Renderer;
   keyPad$: Observable<KeyPad>;
   speed$ = interval(1);
-
+  isRunning: boolean;
   constructor() {
     // start initialize
     this.intialize();
@@ -28,7 +28,9 @@ class Main {
 
   intialize() {
     this.loadFlag = false;
+    this.isRunning = true;
     this.loadGame$ = this.loadGameSubject$.asObservable();
+
     // initialize screen
     this.renderer = new Renderer();
     // initialize keypad
@@ -48,38 +50,25 @@ class Main {
       map(([ram, keyPad, arrayBuffer]) => {
         return arrayBuffer ? new CPU(ram, keyPad) : null;
       }),
-
+      scan((oldCpuInit, newCpuInit) => {
+        if (oldCpuInit) {
+          oldCpuInit.destroy();
+        }
+        return newCpuInit;
+      }),
       shareReplay(1)
     );
 
     // start initializing.
-    this.cpu$.subscribe(res => {
-      if (res != null) {
-        this.run(); // can be switched to operators.
-      }
-    });
-  }
-
-  run() {
-
-    // running the cpu.
-    combineLatest(this.cpu$, this.speed$)
+    this.cpu$
       .pipe(
-        tap(([cpu, speed]) => {
-          // console.log(cpu, speed);
-          cpu.runCycle();
-          if (cpu.drawFlag) {
-            cpu.drawFlag = false;
-          }
-        })
+        switchMap(cpu => {
+          //subscribing to draw..
+          return cpu ? cpu.draw$.pipe(tap(graphicArray => this.renderer.drawScreen(graphicArray))) : of(null);
+        }),
+        takeWhile(() => this.isRunning)
       )
       .subscribe();
-
-      //subscribing to draw..
-      this.cpu$.pipe(
-        switchMap((cpu) => {
-          return cpu.draw$.pipe(tap(graphicArray => this.renderer.drawScreen(graphicArray)));
-        })).subscribe();
   }
 
   loadGame(file: any): boolean {
@@ -92,11 +81,12 @@ class Main {
   }
 
   loadGameToRam(ram: RAM, arrayBuffer: ArrayBuffer) {
+    this.loadFlag = false;
     let buffer = new Uint8Array(arrayBuffer);
     for (let i = 0; i < buffer.length; i++) {
       ram.write(0x200 + i, buffer[i]);
     }
-    console.log('loaded');
+    console.log('game loaded');
     this.loadFlag = true;
     //this.run();
   }
