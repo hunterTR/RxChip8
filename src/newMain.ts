@@ -1,23 +1,67 @@
-import { fromEvent, merge, Observable } from 'rxjs';
-import { map, tap, scan, switchMap, distinctUntilChanged } from 'rxjs/operators';
+import { fromEvent, merge, Observable, interval, BehaviorSubject, timer, NEVER } from 'rxjs';
+import { map, tap, scan, switchMap, distinctUntilChanged, withLatestFrom, shareReplay, takeWhile } from 'rxjs/operators';
 import { CPU } from './cpu';
 import { RAM } from './ram';
 import { KeyPad } from './keypad';
 import { readFile } from './utils/observableReader';
+import { Renderer } from './renderer';
 
 export class NewMain {
+  private stateSubject$: BehaviorSubject<Partial<CPU>> = new BehaviorSubject<Partial<CPU>>(null);
+  private renderer = new Renderer();
   // initialState is a brand new CPU
   initialState: CPU = new CPU(new RAM(), new KeyPad());
   keyPad: Uint8Array;
+
+  //STATE - CPU
+  state$ = this.stateSubject$.asObservable().pipe(
+    scan((state, value) => {
+      const test = value ? Object.assign(state, value) : state;
+      //console.log(test, value);
+      return test;
+    }, this.initialState)
+  );
+
+  ticker$ = this.state$.pipe(
+    switchMap(state => {
+      return state ? timer(state.clockSpeed) : NEVER;
+    })
+  );
+
+  // RUNNING - TICKING
+  run$ = this.ticker$.pipe(
+    withLatestFrom(this.state$),
+    tap(([, state]) => {
+      state.runCycle();
+      this.stateSubject$.next(state);
+    }),
+    takeWhile(([, state]) => !state.ram.memoryOverflow),
+    map(([, state]) => state.graphicArray),
+    distinctUntilChanged((x, y) => {
+      for (let i = 0; i < x.length; i++) {
+        for (let j = 0; j < x[i].length; j++) {
+          if (x[i][j] !== y[i][j]) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }),
+    tap(graphicArray => this.renderer.drawScreen(graphicArray))
+  );
 
   //EVENTS  //throws bunch of side effects to update our state.
   private keyUp$: Observable<any> = fromEvent(document, 'keyup');
   private keyDown$: Observable<any> = fromEvent(document, 'keydown');
   keyPress$: Observable<Uint8Array> = merge(this.keyUp$, this.keyDown$).pipe(
-    scan((acc, [keyUp, keyDown]) => (this.keyDownEventHandler(acc, keyDown), this.keyUpEventHandler(acc, keyUp)), new Uint8Array(16)),
+    scan((acc, x) => {
+      return this.keyDownEventHandler(acc, x);
+    }, new Uint8Array(16)),
     distinctUntilChanged(),
-    tap(() => {
+    tap(keyPad => {
       //side effect
+      console.log(keyPad);
+      this.stateSubject$.next({ keyPad });
     })
   );
 
@@ -27,124 +71,170 @@ export class NewMain {
         tap(res => {
           let buffer = new Uint8Array(res as ArrayBuffer);
           const newState = new CPU(new RAM(), new KeyPad());
+          for (let i = 0; i < fontset.length; i++) {
+            newState.ram.write(i, fontset[i]);
+          }
           for (let i = 0; i < buffer.length; i++) {
             newState.ram.write(0x200 + i, buffer[i]);
           }
-          // .next the newState // side effect
+
+          console.log(newState);
+          this.stateSubject$.next(newState);
         })
       )
     )
   );
 
-  keyDownEventHandler(keyPad, event) {
-    if (event) {
-      const keyName = event.key;
-      if (keyName === '1') {
-        keyPad[0] = 1;
-      }
-      if (keyName === '2') {
-        keyPad[1] = 1;
-      }
-      if (keyName === '3') {
-        keyPad[2] = 1;
-      }
-      if (keyName === '4') {
-        keyPad[3] = 1;
-      }
-      if (keyName === 'q') {
-        keyPad[4] = 1;
-      }
-      if (keyName === 'w') {
-        keyPad[5] = 1;
-      }
-      if (keyName === 'e') {
-        keyPad[6] = 1;
-      }
-      if (keyName === 'r') {
-        keyPad[7] = 1;
-      }
-      if (keyName === 'a') {
-        keyPad[8] = 1;
-      }
-      if (keyName === 's') {
-        keyPad[9] = 1;
-      }
-      if (keyName === 'd') {
-        keyPad[10] = 1;
-      }
-      if (keyName === 'f') {
-        keyPad[11] = 1;
-      }
-      if (keyName === 'z') {
-        keyPad[12] = 1;
-      }
-      if (keyName === 'x') {
-        keyPad[13] = 1;
-      }
-      if (keyName === 'c') {
-        keyPad[14] = 1;
-      }
-      if (keyName === 'v') {
-        keyPad[15] = 1;
-      }
-      console.log(keyName);
-    }
-    return keyPad;
-  }
+  //TESTING
 
-  keyUpEventHandler(keyPad, event) {
+  events$ = merge(this.loadGameEvent$, this.keyPress$);
+
+  keyDownEventHandler(keyPadParam: Uint8Array, event: KeyboardEvent) {
+    const keyPad = [...keyPadParam];
     if (event) {
       const keyName = event.key;
+      const key = event.type === 'keyup' ? 0 : 1;
       if (keyName === '1') {
-        keyPad[0] = 0;
+        keyPad[0] = key;
       }
       if (keyName === '2') {
-        keyPad[1] = 0;
+        keyPad[1] = key;
       }
       if (keyName === '3') {
-        keyPad[2] = 0;
+        keyPad[2] = key;
       }
       if (keyName === '4') {
-        keyPad[3] = 0;
+        keyPad[3] = key;
       }
       if (keyName === 'q') {
-        keyPad[4] = 0;
+        keyPad[4] = key;
       }
       if (keyName === 'w') {
-        keyPad[5] = 0;
+        keyPad[5] = key;
       }
       if (keyName === 'e') {
-        keyPad[6] = 0;
+        keyPad[6] = key;
       }
       if (keyName === 'r') {
-        keyPad[7] = 0;
+        keyPad[7] = key;
       }
       if (keyName === 'a') {
-        keyPad[8] = 0;
+        keyPad[8] = key;
       }
       if (keyName === 's') {
-        keyPad[9] = 0;
+        keyPad[9] = key;
       }
       if (keyName === 'd') {
-        keyPad[10] = 0;
+        keyPad[10] = key;
       }
       if (keyName === 'f') {
-        keyPad[11] = 0;
+        keyPad[11] = key;
       }
       if (keyName === 'z') {
-        keyPad[12] = 0;
+        keyPad[12] = key;
       }
       if (keyName === 'x') {
-        keyPad[13] = 0;
+        keyPad[13] = key;
       }
       if (keyName === 'c') {
-        keyPad[14] = 0;
+        keyPad[14] = key;
       }
       if (keyName === 'v') {
-        keyPad[15] = 0;
+        keyPad[15] = key;
       }
-      console.log(keyName);
+      //  console.log(keyName);
     }
     return keyPad;
   }
 }
+const fontset: number[] = [
+  0xf0,
+  0x90,
+  0x90,
+  0x90,
+  0xf0, // 0
+  0x20,
+  0x60,
+  0x20,
+  0x20,
+  0x70, // 1
+  0xf0,
+  0x10,
+  0xf0,
+  0x80,
+  0xf0, // 2
+  0xf0,
+  0x10,
+  0xf0,
+  0x10,
+  0xf0, // 3
+  0x90,
+  0x90,
+  0xf0,
+  0x10,
+  0x10, // 4
+  0xf0,
+  0x80,
+  0xf0,
+  0x10,
+  0xf0, // 5
+  0xf0,
+  0x80,
+  0xf0,
+  0x90,
+  0xf0, // 6
+  0xf0,
+  0x10,
+  0x20,
+  0x40,
+  0x40, // 7
+  0xf0,
+  0x90,
+  0xf0,
+  0x90,
+  0xf0, // 8
+  0xf0,
+  0x90,
+  0xf0,
+  0x10,
+  0xf0, // 9
+  0xf0,
+  0x90,
+  0xf0,
+  0x90,
+  0x90, // A
+  0xe0,
+  0x90,
+  0xe0,
+  0x90,
+  0xe0, // B
+  0xf0,
+  0x80,
+  0x80,
+  0x80,
+  0xf0, // C
+  0xe0,
+  0x90,
+  0x90,
+  0x90,
+  0xe0, // D
+  0xf0,
+  0x80,
+  0xf0,
+  0x80,
+  0xf0, // E
+  0xf0,
+  0x80,
+  0xf0,
+  0x80,
+  0x80 // F
+];
+
+const test = new NewMain();
+
+test.events$.subscribe();
+test.state$.subscribe();
+
+fromEvent(document.getElementById('startButton'), 'click')
+  .pipe(switchMap(() => test.run$))
+  .subscribe();

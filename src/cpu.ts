@@ -17,7 +17,7 @@ export class CPU {
   keyPad: Uint8Array;
   graphicArray: number[][];
   drawFlag: boolean;
-  cycleSpeed: number = 1;
+  clockSpeed: number = 1;
   draw$: Observable<number[][]>;
   speed$ = interval(1);
   isRunning: boolean;
@@ -368,7 +368,7 @@ export class CPU {
     }
 
     this.PC += 2;
-    //console.log(this.PC);
+    console.log(this.PC);
   }
 
   initialize() {
@@ -384,14 +384,14 @@ export class CPU {
     this.draw$ = this.drawSubject$.asObservable();
     this.resetRegisters();
     // start running the cpu.
-    this.speed$
-      .pipe(
-        tap((speed) => {
-          this.runCycle();
-        }),
-        takeWhile(() => this.isRunning)
-      )
-      .subscribe();
+    // this.speed$
+    //   .pipe(
+    //     tap((speed) => {
+    //       this.runCycle();
+    //     }),
+    //     takeWhile(() => this.isRunning)
+    //   )
+    //   .subscribe();
   }
 
   destroy(){

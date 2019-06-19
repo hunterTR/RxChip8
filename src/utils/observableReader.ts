@@ -14,6 +14,6 @@ export const readFile = (blob: Blob): Observable<ArrayBuffer> =>
     reader.onload = () => obs.next(reader.result);
     reader.onloadend = () => obs.complete();
 
-    return reader.readAsText(blob);
+    return reader.readAsArrayBuffer(blob);
   });
 }
