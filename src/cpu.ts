@@ -18,9 +18,8 @@ export class CPU {
   graphicArray: number[][];
   drawFlag: boolean;
   clockSpeed: number = 1;
-  draw$: Observable<number[][]>;
-  speed$ = interval(1);
   isRunning: boolean;
+  isPaused: boolean;
   //registers
   V0: number;
   V1: number;
@@ -381,7 +380,6 @@ export class CPU {
     this.stackPointer = 0;
     this.resetScreenArray();
     this.drawSubject$ = new BehaviorSubject<number[][]>(this.graphicArray);
-    this.draw$ = this.drawSubject$.asObservable();
     this.resetRegisters();
     // start running the cpu.
     // this.speed$
@@ -392,10 +390,6 @@ export class CPU {
     //     takeWhile(() => this.isRunning)
     //   )
     //   .subscribe();
-  }
-
-  destroy(){
-    this.isRunning=false;
   }
 
   resetRegisters() {

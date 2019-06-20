@@ -24,7 +24,7 @@ export class NewMain {
 
   ticker$ = this.state$.pipe(
     switchMap(state => {
-      return state ? timer(state.clockSpeed) : NEVER;
+      return !state.isPaused ? timer(state.clockSpeed) : NEVER;
     })
   );
 
@@ -32,10 +32,10 @@ export class NewMain {
   run$ = this.ticker$.pipe(
     withLatestFrom(this.state$),
     tap(([, state]) => {
-      state.runCycle();
+        state.runCycle();
       this.stateSubject$.next(state);
     }),
-    takeWhile(([, state]) => !state.ram.memoryOverflow),
+    takeWhile(([, state]) => !state.ram.memoryOverflow && state.isRunning),
     map(([, state]) => state.graphicArray),
     distinctUntilChanged((x, y) => {
       for (let i = 0; i < x.length; i++) {
@@ -55,7 +55,7 @@ export class NewMain {
   private keyDown$: Observable<any> = fromEvent(document, 'keydown');
   keyPress$: Observable<Uint8Array> = merge(this.keyUp$, this.keyDown$).pipe(
     scan((acc, x) => {
-      return this.keyDownEventHandler(acc, x);
+      return this.keyPressEventHandler(acc, x);
     }, new Uint8Array(16)),
     distinctUntilChanged(),
     tap(keyPad => {
@@ -85,11 +85,24 @@ export class NewMain {
     )
   );
 
+  startClickEvent$ = fromEvent(document.getElementById('startButton'), 'click').pipe(switchMap(() => test.run$));
+  stopClickEvent$ = fromEvent(document.getElementById('stopButton'), 'click').pipe(
+    tap(() => {
+      this.stateSubject$.next({ isRunning: false });
+    })
+  );
+  pauseClickEvent$ = fromEvent(document.getElementById('pauseButton'), 'click').pipe(
+    withLatestFrom(this.state$),
+    tap(([,state]) => {
+      this.stateSubject$.next({ isPaused: !state.isPaused });
+    })
+  );
+
   //TESTING
 
-  events$ = merge(this.loadGameEvent$, this.keyPress$);
+  events$ = merge(this.loadGameEvent$, this.keyPress$, this.startClickEvent$, this.stopClickEvent$,this.pauseClickEvent$);
 
-  keyDownEventHandler(keyPadParam: Uint8Array, event: KeyboardEvent) {
+  keyPressEventHandler(keyPadParam: Uint8Array, event: KeyboardEvent) {
     const keyPad = [...keyPadParam];
     if (event) {
       const keyName = event.key;
@@ -233,8 +246,4 @@ const fontset: number[] = [
 const test = new NewMain();
 
 test.events$.subscribe();
-test.state$.subscribe();
-
-fromEvent(document.getElementById('startButton'), 'click')
-  .pipe(switchMap(() => test.run$))
-  .subscribe();
+//test.state$.subscribe();
