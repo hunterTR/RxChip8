@@ -16,9 +16,9 @@ export class NewMain {
   //STATE - CPU
   state$ = this.stateSubject$.asObservable().pipe(
     scan((state, value) => {
-      const test = value ? Object.assign(state, value) : state;
+      const updatedState = value ? Object.assign(state, value) : state;
       //console.log(test, value);
-      return test;
+      return updatedState;
     }, this.initialState)
   );
 
@@ -38,6 +38,7 @@ export class NewMain {
     takeWhile(([, state]) => !state.ram.memoryOverflow && state.isRunning),
     map(([, state]) => state.graphicArray),
     distinctUntilChanged((x, y) => {
+      //written a compare.
       for (let i = 0; i < x.length; i++) {
         for (let j = 0; j < x[i].length; j++) {
           if (x[i][j] !== y[i][j]) {
@@ -71,9 +72,11 @@ export class NewMain {
         tap(res => {
           let buffer = new Uint8Array(res as ArrayBuffer);
           const newState = new CPU(new RAM(), new KeyPad());
+          //writing fontset to ram.
           for (let i = 0; i < fontset.length; i++) {
             newState.ram.write(i, fontset[i]);
           }
+          //writing game data to ram.
           for (let i = 0; i < buffer.length; i++) {
             newState.ram.write(0x200 + i, buffer[i]);
           }
@@ -97,8 +100,6 @@ export class NewMain {
       this.stateSubject$.next({ isPaused: !state.isPaused });
     })
   );
-
-  //TESTING
 
   events$ = merge(this.loadGameEvent$, this.keyPress$, this.startClickEvent$, this.stopClickEvent$,this.pauseClickEvent$);
 
@@ -244,6 +245,4 @@ const fontset: number[] = [
 ];
 
 const test = new NewMain();
-
 test.events$.subscribe();
-//test.state$.subscribe();

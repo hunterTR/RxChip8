@@ -272,18 +272,22 @@ export class CPU {
           case 0x0055: {
             // Stores V0 to VX (including VX) in memory starting at address I.
             // I is increased by 1 for each value written.
+            // but I itself is left unmodified.
+            let tmp = this.I;
             for (let i = 0; i <= registerX; i++) {
-              this.ram.write(this.I, this.getRegister(i));
-              this.I++;
+              this.ram.write(tmp, this.getRegister(i));
+              tmp++;
             }
             break;
           }
           case 0x0065: {
             // Fills V0 to VX (including VX) with values from memory starting at address I.
             // I is increased by 1 for each value written.
+            // but I itself is left unmodified.
+            let tmp = this.I;
             for (let i = 0; i <= registerX; i++) {
-              this.setRegister(i, this.ram.read(this.I));
-              this.I++;
+              this.setRegister(i, this.ram.read(tmp));
+              tmp++;
             }
             break;
           }
@@ -313,15 +317,15 @@ export class CPU {
           case RegisterOperation.SET_REGISTER_SHIFT_LEFT: {
             //Shifts VY left by one and copies the result to VX.
             // VF is set to the value of the most significant bit of VY before the shift.
-            this.VF = this.getRegister(registerY) >> 7;
-            const shifted = this.getRegister(registerY) << 1;
-            this.setRegister(registerY, shifted);
+            this.VF = this.getRegister(registerX) >> 7;
+            const shifted = this.getRegister(registerX) << 1;
+            //this.setRegister(registerY, shifted);
             this.setRegister(registerX, shifted);
             break;
           }
           case RegisterOperation.SET_REGISTER_SHIFT_RIGHT: {
-            this.VF = this.getRegister(registerY) & 0x01;
-            const shifted = this.getRegister(registerY) >> 1;
+            this.VF = this.getRegister(registerX) & 0x01;
+            const shifted = this.getRegister(registerX) >> 1;
             this.setRegister(registerX, shifted);
             break;
           }
