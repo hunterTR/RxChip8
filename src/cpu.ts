@@ -1,20 +1,25 @@
-import { Opcode } from "./models/opcode";
-import { OpcodeBranch, RegisterOperation } from "./enums/opcode-branch";
-import { RAM } from "./ram";
+import { Opcode } from './models/opcode';
+import { OpcodeBranch, RegisterOperation } from './enums/opcode-branch';
+import { RAM } from './ram';
+import { KeyPad } from './keypad';
+import { Observable, BehaviorSubject, interval } from 'rxjs';
+import { tap, takeWhile } from 'rxjs/operators';
 
 export class CPU {
-  ram: RAM;
+  private drawSubject$: BehaviorSubject<number[][]> = new BehaviorSubject<number[][]>(new Array<Array<number>>());
   PC: number;
   I: number;
   stack: Uint16Array;
   stackPointer: number;
   delayTimer: number;
   soundTimer: number;
-  keyPad: Uint8Array;
   key: number;
+  keyPad: Uint8Array;
   graphicArray: number[][];
   drawFlag: boolean;
-
+  clockSpeed: number = 1;
+  isRunning: boolean;
+  isPaused: boolean;
   //registers
   V0: number;
   V1: number;
@@ -32,9 +37,9 @@ export class CPU {
   VD: number;
   VE: number;
   VF: number;
-  constructor(ram: RAM) {
+  constructor(public ram: RAM, keyPad: KeyPad) {
+    this.keyPad = keyPad.keyPad;
     this.initialize(); //initialize cpu
-    this.ram = ram; //connect the ram
   }
 
   decode(): Opcode {
@@ -46,8 +51,7 @@ export class CPU {
       secondaryBranch = this.ram.read(this.PC + 1);
     }
 
-    const opcode: number =
-      (this.ram.read(this.PC) << 8) | this.ram.read(this.PC + 1);
+    const opcode: number = (this.ram.read(this.PC) << 8) | this.ram.read(this.PC + 1);
     return {
       mainBranch: mainBranch,
       secondaryBranch: secondaryBranch,
@@ -58,17 +62,16 @@ export class CPU {
   runCycle() {
     //console.log('running cycle');
     const instruction = this.decode();
-    console.log(instruction.opcode.toString(16));
+    // console.log(instruction.opcode.toString(16));
     const registerX = (instruction.opcode & 0x0f00) >> 8;
     const registerY = (instruction.opcode & 0x00f0) >> 4;
-
 
     if (this.delayTimer > 0) {
       --this.delayTimer;
     }
 
     if (this.soundTimer > 0) {
-      if (this.soundTimer == 1) console.log("make sound");
+      if (this.soundTimer == 1) console.log('make sound');
 
       --this.soundTimer;
     }
@@ -104,7 +107,7 @@ export class CPU {
         break;
       }
       case OpcodeBranch.CALL_SUBROUTINE: {
-        this.PC+=2
+        this.PC += 2;
         const subRoutineAddress = instruction.opcode & 0x0fff;
         this.stack[this.stackPointer] = this.PC;
         this.stackPointer = (this.stackPointer + 1) % this.stack.length;
@@ -184,14 +187,15 @@ export class CPU {
           const row = this.ram.read(this.I + h);
           for (let w = 0; w < 8; w++) {
             if ((row & (0x80 >> w)) != 0) {
-              if (this.graphicArray[y+h][x+w] == 1) {
+              if (this.graphicArray[y + h][x + w] == 1) {
                 this.VF = 0x01;
               }
-              this.graphicArray[y+h][x+w] ^= 1;
+              this.graphicArray[y + h][x + w] ^= 1;
             }
           }
         }
-        this.drawFlag = true;
+        // this.drawFlag = true;
+        this.drawSubject$.next(this.graphicArray);
         break;
       }
       case 0x000e: {
@@ -222,7 +226,6 @@ export class CPU {
             break;
           }
           case 0x000a: {
-
             console.log('waiting for key press.');
             //A key press is awaited, and then stored in VX.
             // (Blocking Operation. All instruction halted until next key event)
@@ -269,18 +272,22 @@ export class CPU {
           case 0x0055: {
             // Stores V0 to VX (including VX) in memory starting at address I.
             // I is increased by 1 for each value written.
+            // but I itself is left unmodified.
+            let tmp = this.I;
             for (let i = 0; i <= registerX; i++) {
-              this.ram.write(this.I, this.getRegister(i));
-              this.I++;
+              this.ram.write(tmp, this.getRegister(i));
+              tmp++;
             }
             break;
           }
           case 0x0065: {
             // Fills V0 to VX (including VX) with values from memory starting at address I.
             // I is increased by 1 for each value written.
+            // but I itself is left unmodified.
+            let tmp = this.I;
             for (let i = 0; i <= registerX; i++) {
-              this.setRegister(i, this.ram.read(this.I));
-              this.I++;
+              this.setRegister(i, this.ram.read(tmp));
+              tmp++;
             }
             break;
           }
@@ -290,8 +297,7 @@ export class CPU {
       case OpcodeBranch.REGISTER_OP: {
         switch (instruction.secondaryBranch) {
           case RegisterOperation.ADD_REGISTER: {
-            const addition =
-              this.getRegister(registerX) + this.getRegister(registerY);
+            const addition = this.getRegister(registerX) + this.getRegister(registerY);
             if (addition > 0xff) this.VF = 0x01;
             else this.VF = 0x00;
 
@@ -299,29 +305,27 @@ export class CPU {
             break;
           }
           case RegisterOperation.SET_REGISTER_AND: {
-            const and =
-              this.getRegister(registerX) & this.getRegister(registerY);
+            const and = this.getRegister(registerX) & this.getRegister(registerY);
             this.setRegister(registerX, and);
             break;
           }
           case RegisterOperation.SET_REGISTER_OR: {
-            const or =
-              this.getRegister(registerX) | this.getRegister(registerY);
+            const or = this.getRegister(registerX) | this.getRegister(registerY);
             this.setRegister(registerX, or);
             break;
           }
           case RegisterOperation.SET_REGISTER_SHIFT_LEFT: {
             //Shifts VY left by one and copies the result to VX.
             // VF is set to the value of the most significant bit of VY before the shift.
-            this.VF = this.getRegister(registerY) >> 7;
-            const shifted = this.getRegister(registerY) << 1;
-            this.setRegister(registerY, shifted);
+            this.VF = this.getRegister(registerX) >> 7;
+            const shifted = this.getRegister(registerX) << 1;
+            //this.setRegister(registerY, shifted);
             this.setRegister(registerX, shifted);
             break;
           }
           case RegisterOperation.SET_REGISTER_SHIFT_RIGHT: {
-            this.VF = this.getRegister(registerY) & 0x01;
-            const shifted = this.getRegister(registerY) >> 1;
+            this.VF = this.getRegister(registerX) & 0x01;
+            const shifted = this.getRegister(registerX) >> 1;
             this.setRegister(registerX, shifted);
             break;
           }
@@ -330,15 +334,13 @@ export class CPU {
             break;
           }
           case RegisterOperation.SET_REGISTER_XOR: {
-            const xor =
-              this.getRegister(registerX) ^ this.getRegister(registerY);
+            const xor = this.getRegister(registerX) ^ this.getRegister(registerY);
             this.setRegister(registerX, xor);
             break;
           }
           case RegisterOperation.SUBSTRACT_REGISTER_OPPOSITE: {
             //Sets VX to VY minus VX. VF is set to 0 when there's a borrow, and 1 when there isn't.
-            const substraction =
-              this.getRegister(registerY) - this.getRegister(registerX);
+            const substraction = this.getRegister(registerY) - this.getRegister(registerX);
             if (substraction < 0x00) this.VF = 0x00;
             else this.VF = 0x01;
 
@@ -346,8 +348,7 @@ export class CPU {
             break;
           }
           case RegisterOperation.SUBSTRACT_REGISTER: {
-            const substraction =
-              this.getRegister(registerX) - this.getRegister(registerY);
+            const substraction = this.getRegister(registerX) - this.getRegister(registerY);
             if (substraction < 0x00) this.VF = 0x00;
             else this.VF = 0x01;
 
@@ -359,31 +360,43 @@ export class CPU {
             console.log('invalid register operation opcode');
             break;
           }
-
         }
         break;
       }
 
       default: {
-        console.log("unknown opcode");
+        console.log('unknown opcode');
         break;
       }
     }
 
     this.PC += 2;
-    //console.log(this.PC);
+    console.log(this.PC);
   }
 
   initialize() {
+    this.isRunning = true;
     this.PC = 0x200 & 0xffff;
     this.I = 0 & 0xffff;
     this.delayTimer = 0 & 0xff;
     this.soundTimer = 0 & 0xff;
     this.stack = new Uint16Array(16);
     this.stackPointer = 0;
-    this.keyPad = new Uint8Array(16);
     this.resetScreenArray();
+    this.drawSubject$ = new BehaviorSubject<number[][]>(this.graphicArray);
+    this.resetRegisters();
+    // start running the cpu.
+    // this.speed$
+    //   .pipe(
+    //     tap((speed) => {
+    //       this.runCycle();
+    //     }),
+    //     takeWhile(() => this.isRunning)
+    //   )
+    //   .subscribe();
+  }
 
+  resetRegisters() {
     this.V0 = 0 & 0xff;
     this.V1 = 0 & 0xff;
     this.V2 = 0 & 0xff;
@@ -401,7 +414,6 @@ export class CPU {
     this.VE = 0 & 0xff;
     this.VF = 0 & 0xff;
   }
-
   getRegister(num: number): number {
     // instead of this extra code we could have one register and emulate registers like a memory.
     switch (num) {
@@ -532,7 +544,7 @@ export class CPU {
   resetScreenArray() {
     this.graphicArray = new Array<Array<number>>();
     for (let h = 0; h < 100; h++) {
-        this.graphicArray[h] = [];
+      this.graphicArray[h] = [];
       for (let w = 0; w < 100; w++) {
         this.graphicArray[h][w] = 0;
       }
