@@ -194,8 +194,6 @@ export class CPU {
             }
           }
         }
-        // this.drawFlag = true;
-        this.drawSubject$.next(this.graphicArray);
         break;
       }
       case 0x000e: {
@@ -371,7 +369,6 @@ export class CPU {
     }
 
     this.PC += 2;
-    console.log(this.PC);
   }
 
   initialize() {
@@ -385,15 +382,6 @@ export class CPU {
     this.resetScreenArray();
     this.drawSubject$ = new BehaviorSubject<number[][]>(this.graphicArray);
     this.resetRegisters();
-    // start running the cpu.
-    // this.speed$
-    //   .pipe(
-    //     tap((speed) => {
-    //       this.runCycle();
-    //     }),
-    //     takeWhile(() => this.isRunning)
-    //   )
-    //   .subscribe();
   }
 
   resetRegisters() {
@@ -543,9 +531,9 @@ export class CPU {
 
   resetScreenArray() {
     this.graphicArray = new Array<Array<number>>();
-    for (let h = 0; h < 100; h++) {
+    for (let h = 0; h < 32; h++) {
       this.graphicArray[h] = [];
-      for (let w = 0; w < 100; w++) {
+      for (let w = 0; w < 64; w++) {
         this.graphicArray[h][w] = 0;
       }
     }

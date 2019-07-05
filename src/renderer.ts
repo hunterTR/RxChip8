@@ -27,6 +27,6 @@ export class Renderer {
   }
   drawPixel(x: number, y: number) {
     this.canvasContext.fillStyle = 'white';
-    this.canvasContext.fillRect(x * pixelScale, y * pixelScale, 10, 10);
+    this.canvasContext.fillRect(x * pixelScale, y * pixelScale, pixelScale, pixelScale);
   }
 }
