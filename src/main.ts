@@ -6,7 +6,7 @@ import { KeyPad } from './keypad';
 import { readFile } from './utils/observableReader';
 import { Renderer } from './renderer';
 
-export class NewMain {
+export class Main {
   private stateSubject$: BehaviorSubject<Partial<CPU>> = new BehaviorSubject<Partial<CPU>>(null);
   private renderer = new Renderer();
   // initialState is a brand new CPU
@@ -15,17 +15,11 @@ export class NewMain {
 
   //STATE - CPU
   state$ = this.stateSubject$.asObservable().pipe(
-    scan((state, value) => {
-      const updatedState = value ? Object.assign(state, value) : state;
-      //console.log(test, value);
-      return updatedState;
-    }, this.initialState)
+    scan((state, value) => value ? Object.assign(state, value) : state, this.initialState)
   );
 
   ticker$ = this.state$.pipe(
-    switchMap(state => {
-      return !state.isPaused ? timer(state.clockSpeed) : NEVER;
-    })
+    switchMap(state => !state.isPaused ? timer(state.clockSpeed) : NEVER)
   );
 
   // RUNNING - TICKING
@@ -55,9 +49,7 @@ export class NewMain {
   private keyUp$: Observable<any> = fromEvent(document, 'keyup');
   private keyDown$: Observable<any> = fromEvent(document, 'keydown');
   keyPress$: Observable<Uint8Array> = merge(this.keyUp$, this.keyDown$).pipe(
-    scan((acc, x) => {
-      return this.keyPressEventHandler(acc, x);
-    }, new Uint8Array(16)),
+    scan((acc, x) => this.keyPressEventHandler(acc, x), new Uint8Array(16)),
     distinctUntilChanged(),
     tap(keyPad => {
       //side effect
@@ -244,5 +236,7 @@ const fontset: number[] = [
   0x80 // F
 ];
 
-const test = new NewMain();
+const test = new Main();
+
 test.events$.subscribe();
+
